@@ -180,19 +180,6 @@ def main():
                 best_n100 = n100
 
 
-## 혹시모르니냄겨봄 inference로 옮기는데
-        # # Load the best saved model.
-        # with open(args.save, 'rb') as f:
-        #     model = torch.load(f)
-
-        # # Run on test data.
-        # test_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = test_data_tr, data_te = test_data_te, is_VAE=True, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
-        # print('=' * 89)
-        # print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
-        #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
-        # print('=' * 89)
-
-
     else:
         model = S3RecModel(args=args)
 

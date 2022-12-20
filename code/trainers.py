@@ -431,16 +431,6 @@ def evaluate(model, criterion, data_tr, data_te, batch_size, N, device, total_an
             n100_list.append(n100)
             r20_list.append(r20)
             r50_list.append(r50)
- 
-            batch_users = recon_batch.shape[0]
-            idx_topk_part = bn.argpartition(-recon_batch, 10, axis=1)
-            topk_part = recon_batch[np.arange(batch_users)[:, np.newaxis],
-                            idx_topk_part[:, :10]]
-            idx_part = np.argsort(-topk_part, axis=1)
-
-            idx_topk = idx_topk_part[np.arange(batch_users)[:, np.newaxis], idx_part]
-
-
 
     total_loss /= len(range(0, e_N, batch_size))
     n100_list = np.concatenate(n100_list)

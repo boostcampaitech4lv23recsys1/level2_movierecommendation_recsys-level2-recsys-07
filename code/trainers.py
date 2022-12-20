@@ -431,6 +431,16 @@ def evaluate(model, criterion, data_tr, data_te, batch_size, N, device, total_an
             n100_list.append(n100)
             r20_list.append(r20)
             r50_list.append(r50)
+ 
+            batch_users = recon_batch.shape[0]
+            idx_topk_part = bn.argpartition(-recon_batch, 10, axis=1)
+            topk_part = recon_batch[np.arange(batch_users)[:, np.newaxis],
+                            idx_topk_part[:, :10]]
+            idx_part = np.argsort(-topk_part, axis=1)
+
+            idx_topk = idx_topk_part[np.arange(batch_users)[:, np.newaxis], idx_part]
+
+
 
     total_loss /= len(range(0, e_N, batch_size))
     n100_list = np.concatenate(n100_list)
@@ -488,3 +498,64 @@ def make_submission(model, criterion, data_tr, batch_size, N, device, total_anne
     
     final = array
     return final
+
+
+# bert4rec
+from tqdm import tqdm
+from utils import EarlyStopping
+def bert4rec_train(args, model, data_loader, optimizer, criterion, device):
+    epochs = args.epochs
+
+    early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
+
+    for epoch in range(1, epochs + 1):
+        tbar = tqdm(data_loader)
+        for step, (log_seqs, labels) in enumerate(tbar):
+            logits = model(log_seqs)
+            # size matching
+            logits = logits.view(-1, logits.size(-1))
+            labels = labels.view(-1).to(device)
+            
+            optimizer.zero_grad()
+            loss = criterion(logits, labels)
+            loss.backward()
+            optimizer.step()
+            
+            tbar.set_description(f'Epoch: {epoch:3d}| Step: {step:3d}| Train loss: {loss:.5f}')
+
+        early_stopping([-loss], model)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+def random_neg(l, r, s):
+    # log에 존재하는 아이템과 겹치지 않도록 sampling
+    t = np.random.randint(l, r)
+    while t in s:
+        t = np.random.randint(l, r)
+    return t
+
+def bert4rec_evaluate(args, model, user_item_seq, label, df, num_user, num_item, max_len):
+    model.eval()
+    NDCG = 0.0 # NDCG@10
+    HIT = 0.0 # HIT@10
+
+    num_item_sample = 100
+    num_user_sample = 1000
+    users = np.random.randint(0, num_user, num_user_sample) # 1000개만 sampling 하여 evaluation
+    for u in users:
+        seq = (user_item_seq[u] + [num_item + 1])[-max_len:]
+        rated = set(user_item_seq[u] + label[u])
+        item_idx = [label[u][0]] + [random_neg(1, num_item + 1, rated) for _ in range(num_item_sample)]
+
+        with torch.no_grad():
+            predictions = - model(np.array([seq]))
+            predictions = predictions[0][-1][item_idx] # sampling
+            rank = predictions.argsort().argsort()[0].item()
+
+        
+        if rank < 10: # @10
+            NDCG += 1 / np.log2(rank + 2)
+            HIT += 1
+    print(f'NDCG@10: {NDCG/num_user_sample}| HIT@10: {HIT/num_user_sample}')
+

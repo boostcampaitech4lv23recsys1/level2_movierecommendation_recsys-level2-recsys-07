@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from modules import Encoder, LayerNorm
+from modules import Encoder, LayerNorm, BERT4RecBlock
 
 #multiVAE 추가
 import numpy as np
@@ -341,3 +341,36 @@ class MultiVAE(nn.Module):
     def loss_function_dae(recon_x, x):
         BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
         return BCE
+
+
+class BERT4Rec(nn.Module):
+    def __init__(self, num_user, num_item, hidden_units, num_heads, num_layers, max_len, dropout_rate, device):
+        super(BERT4Rec, self).__init__()
+
+        self.num_user = num_user
+        self.num_item = num_item
+        self.hidden_units = hidden_units
+        self.num_heads = num_heads
+        self.num_layers = num_layers 
+        self.device = device
+        
+        self.item_emb = nn.Embedding(num_item+2, hidden_units, padding_idx=0) # TODO2: mask와 padding을 고려하여 embedding을 생성해보세요.
+        # item_emb에서 처음으로 나오는 아이템을 표현할 때 모두 0으로 처리해줌
+        self.pos_emb = nn.Embedding(max_len, hidden_units) # learnable positional encoding
+        self.dropout = nn.Dropout(dropout_rate)
+        self.emb_layernorm = nn.LayerNorm(hidden_units, eps=1e-6)
+        
+        self.blocks = nn.ModuleList([BERT4RecBlock(num_heads, hidden_units, dropout_rate) for _ in range(num_layers)])
+        self.out = nn.Linear(hidden_units, num_item+1) # TODO3: 예측을 위한 output layer를 구현해보세요. (num_item 주의)
+        
+    def forward(self, log_seqs):
+        seqs = self.item_emb(torch.LongTensor(log_seqs).to(self.device))
+        positions = np.tile(np.array(range(log_seqs.shape[1])), [log_seqs.shape[0], 1])
+        seqs += self.pos_emb(torch.LongTensor(positions).to(self.device))
+        seqs = self.emb_layernorm(self.dropout(seqs))
+
+        mask = torch.BoolTensor(log_seqs > 0).unsqueeze(1).repeat(1, log_seqs.shape[1], 1).unsqueeze(1).to(self.device) # mask for zero pad
+        for block in self.blocks:
+            seqs, attn_dist = block(seqs, mask)
+        out = self.out(seqs)
+        return out

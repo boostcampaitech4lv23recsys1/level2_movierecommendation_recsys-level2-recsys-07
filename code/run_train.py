@@ -22,6 +22,13 @@ import time
 from trainers import train, evaluate
 import torch.optim as optim
 
+#bert4rec
+from models import BERT4Rec
+from trainers import bert4rec_train, bert4rec_evaluate
+from torch import nn
+
+# from preprocessing import preprocessing
+from datasets import SeqDataset
 
 def main():
     parser = argparse.ArgumentParser()
@@ -33,12 +40,12 @@ def main():
     # model args
     parser.add_argument("--model_name", default="Finetune_full", type=str)
     parser.add_argument(
-        "--hidden_size", type=int, default=8, help="hidden size of transformer model"
+        "--hidden_size", type=int, default=50, help="hidden size of transformer model"
     )
     parser.add_argument(
         "--num_hidden_layers", type=int, default=2, help="number of layers"
     )
-    parser.add_argument("--num_attention_heads", default=2, type=int)
+    parser.add_argument("--num_attention_heads", default=1, type=int)
     parser.add_argument("--hidden_act", default="gelu", type=str)  # gelu relu
     parser.add_argument(
         "--attention_probs_dropout_prob",
@@ -57,7 +64,7 @@ def main():
     parser.add_argument(
         "--batch_size", type=int, default=256, help="number of batch_size"
     )
-    parser.add_argument("--epochs", type=int, default=50, help="number of epochs")
+    parser.add_argument("--epochs", type=int, default=1, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
     parser.add_argument("--log_freq", type=int, default=1, help="per epoch print res")
     parser.add_argument("--seed", default=42, type=int)
@@ -82,7 +89,7 @@ def main():
     # parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 
 
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    # parser.add_argument('--model', default='multivae', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -106,7 +113,14 @@ def main():
                         help='report interval')
     parser.add_argument('--save', type=str, default='/opt/ml/input/code/output/multivae.pt',
                         help='path to save the final model')
+    # args = parser.parse_args([])
+
+    # Set BERT4Rec args
+    parser.add_argument('--model', default='bert4rec', type=str) # bert4rec 추가
+    parser.add_argument('--mask_prob', default=0.15, type=float) # mask_probability 추가
+
     args = parser.parse_args([])
+
 
     # Set the random seed manually for reproductibility.
     torch.manual_seed(args.seed)
@@ -124,6 +138,7 @@ def main():
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
     args.cuda_condition = torch.cuda.is_available() and not args.no_cuda
+
 
 
     #multivae 모델 불러오기 추가
@@ -178,6 +193,57 @@ def main():
                 with open(args.save, 'wb') as f:
                     torch.save(model, f)
                 best_n100 = n100
+
+
+## 혹시모르니냄겨봄 inference로 옮기는데
+        # # Load the best saved model.
+        # with open(args.save, 'rb') as f:
+        #     model = torch.load(f)
+
+        # # Run on test data.
+        # test_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = test_data_tr, data_te = test_data_te, is_VAE=True, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
+        # print('=' * 89)
+        # print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
+        #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
+        # print('=' * 89)
+
+    elif args.model == 'bert4rec':
+        args_str = f"{args.model}-{args.data_name}"
+        checkpoint = args_str + ".pt"
+        args.checkpoint_path = os.path.join(args.output_dir, checkpoint)
+
+        from preprocessing import main as m
+        from tqdm import tqdm
+        user_item_seq, label, num_user, num_item, df = m(args)
+
+        hidden_units = args.hidden_size
+        num_heads    = args.num_attention_heads
+        num_layers   = args.num_hidden_layers
+        dropout_rate = args.hidden_dropout_prob
+        device       = device
+        batch_size   = args.batch_size
+        mask_prob    = args.mask_prob
+        lr           = args.lr
+        epochs       = 1
+
+
+        num_user = num_user
+        num_item = num_item
+        max_len = args.max_seq_length
+
+        seq_dataset = SeqDataset(user_item_seq, num_user, num_item, max_len, mask_prob)
+
+        model = BERT4Rec(num_user, num_item, hidden_units, num_heads, num_layers, max_len, dropout_rate, device)
+        model.to(device)
+        
+        data_loader = DataLoader(seq_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        criterion = nn.CrossEntropyLoss(ignore_index=0)
+
+        bert4rec_train(args, model, data_loader, optimizer, criterion, device)
+        bert4rec_evaluate(args, model, user_item_seq, label, df, num_user, num_item, max_len)
+
+        early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
 
 
     else:

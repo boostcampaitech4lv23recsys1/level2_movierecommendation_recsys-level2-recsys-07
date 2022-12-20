@@ -34,12 +34,12 @@ def main():
     # model args
     parser.add_argument("--model_name", default="Finetune_full", type=str)
     parser.add_argument(
-        "--hidden_size", type=int, default=64, help="hidden size of transformer model"
+        "--hidden_size", type=int, default=50, help="hidden size of transformer model"
     )
     parser.add_argument(
         "--num_hidden_layers", type=int, default=2, help="number of layers"
     )
-    parser.add_argument("--num_attention_heads", default=2, type=int)
+    parser.add_argument("--num_attention_heads", default=1, type=int)
     parser.add_argument("--hidden_act", default="gelu", type=str)  # gelu relu
     parser.add_argument(
         "--attention_probs_dropout_prob",
@@ -76,7 +76,7 @@ def main():
 
 
     #multivae
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    # parser.add_argument('--model', default='multivae', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -100,6 +100,12 @@ def main():
                         help='report interval')
     parser.add_argument('--save', type=str, default='/opt/ml/input/code/output/multivae.pt',
                         help='path to save the final model')
+
+    # bert4rec
+    parser.add_argument('--model', default='bert4rec', type=str) # multivae 추가
+    parser.add_argument('--mask_prob', default=0.15, type=float) # mask_probability 추가                        
+
+    parser.add_argument('--process_core', default=2, type=int) # mask_probability 추가                        
 
     args = parser.parse_args()
 
@@ -166,6 +172,98 @@ def main():
         final = final.sort_values(by='user', ascending=True)
 
         final.to_csv('/opt/ml/input/code/output/submission_multivae.csv')
+
+    elif args.model == 'bert4rec':
+        from datasets import SeqDataset
+        from preprocessing import main as m
+        from trainers import random_neg
+        import numpy as np
+        from tqdm import tqdm
+        from models import BERT4Rec
+
+        user_item_seq, label, num_user, num_item, df = m(args)        
+        num_user = num_user
+        num_item = num_item
+
+        max_len = args.max_seq_length
+        hidden_units = args.hidden_size
+        num_heads    = args.num_attention_heads
+        num_layers   = args.num_hidden_layers
+        dropout_rate = args.hidden_dropout_prob
+        device       = device
+        batch_size   = args.batch_size
+        mask_prob    = args.mask_prob
+        lr           = args.lr
+        epochs       = 1
+
+        model = BERT4Rec(num_user, num_item, hidden_units, num_heads, num_layers, max_len, dropout_rate, device)
+
+        # Load the best saved model.
+        with open('/opt/ml/input/code/output/bert4rec-Ml.pt', 'rb') as f:
+            model.load_state_dict(torch.load(f))
+            # model = torch.load(f)
+
+        seq_dataset = SeqDataset(user_item_seq, num_user, num_item, max_len, mask_prob)
+        data_loader = DataLoader(seq_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+
+        # inferenece
+        def bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len):
+            model.eval()
+            model.to(device)
+            pred_list = []
+            user_list = []
+
+
+            num_item_sample = num_item
+
+            users = df['user_idx'].unique()
+
+            core_user1 = len(users)//4
+            core_user2 = core_user1*2
+            core_user3 = core_user1*3
+
+            # 터미널 여러개 켜서 빨리 inference 보기 위함
+            if args.process_core == 0:
+                users = users
+            elif args.process_core == 1:
+                users = users[:core_user1]
+            elif args.process_core == 2:
+                users = users[core_user1:core_user2]
+            elif args.process_core == 3:
+                users = users[core_user2:core_user3]
+            elif args.process_core == 4:
+                users = users[core_user3:]
+
+            for u in tqdm(users):
+                seq = (user_item_seq[u] + [num_item + 1])[-max_len:]
+                rated = set(user_item_seq[u] + label[u])
+                item_idx = [label[u][0]] + [random_neg(1, num_item, rated) for _ in range(num_item_sample)]
+
+                with torch.no_grad():
+                    predictions = - model(np.array([seq]))
+                    # 9개만 inference되는 user_idx
+                    # if u == 8070:
+                    #     print('user : 8070')
+                    predictions = predictions[0][-1][item_idx]
+
+                    # prediction_list = (predictions.argsort().argsort()[:10]).tolist()
+                    prediction_list = (predictions.argsort().argsort()[:10]+1).tolist()
+                    prediction_list = df[(df['item_idx'].isin(prediction_list))]['item'].unique()
+                    pred_list.extend(prediction_list)
+                    user_list.extend([int(df[df['user_idx']==u]['user'].unique().item())] * len(prediction_list))
+
+            result = pd.DataFrame({"user":user_list, "item":pred_list})
+            result.to_csv(f"./output/bert4rec_result_core{args.process_core}.csv", index=False)
+
+
+
+
+
+        bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len)
+        print(f"finish core : {args.process_core}")
+
+
+
 
     else:
         args.data_file = args.data_dir + "train_ratings.csv"

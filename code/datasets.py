@@ -298,3 +298,51 @@ class MultiVAEDataLoader():
                                  (rows, cols)), dtype='float64',
                                  shape=(n_users, self.n_items))
         return data
+
+
+# bert4rec Dataset
+class SeqDataset(Dataset):
+    def __init__(self, user_item_seq, num_user, num_item, max_len, mask_prob, data_type='train'):
+        self.user_item_seq = user_item_seq
+        self.num_user = num_user
+        self.num_item = num_item
+        self.max_len = max_len
+        self.mask_prob = mask_prob
+        self.data_type = data_type
+
+
+    def __len__(self):
+        # 총 user의 수 = 학습에 사용할 sequence의 수
+        return self.num_user
+
+    def __getitem__(self, user):
+        # iterator를 구동할 때 사용됩니다.
+        items = self.user_item_seq[user]
+        tokens = []
+        labels = []
+
+        for item in items:
+            prob = np.random.random()
+            if prob < self.mask_prob:
+                prob /= self.mask_prob
+
+                # BERT 학습
+                if prob < 0.8:
+                    # masking
+                    tokens.append(self.num_item + 1)  # mask_index: num_item + 1, 0: pad, 1~num_item: item index
+                elif prob < 0.9:
+                    tokens.append(np.random.randint(1, self.num_item+1))  # item random sampling
+                else:
+                    tokens.append(item)
+                labels.append(item)  # 학습에 사용
+            else:
+                tokens.append(item)
+                labels.append(0)  # 학습에 사용 X, trivial
+        tokens = tokens[-self.max_len:]
+        labels = labels[-self.max_len:]
+        mask_len = self.max_len - len(tokens)
+
+        # zero padding
+        tokens = [0] * mask_len + tokens
+        labels = [0] * mask_len + labels
+        return torch.LongTensor(tokens), torch.LongTensor(labels)

@@ -210,6 +210,7 @@ class MultiHeadAttention(nn.Module):
         super(MultiHeadAttention, self).__init__()
         self.num_heads = num_heads # head의 수
         self.hidden_units = hidden_units
+        self.split_size = int(self.hidden_units / self.num_heads)
         
         # query, key, value, output 생성을 위해 Linear 모델 생성
         self.W_Q = nn.Linear(hidden_units, hidden_units, bias=False)
@@ -226,9 +227,9 @@ class MultiHeadAttention(nn.Module):
         batch_size, seqlen = enc.size(0), enc.size(1)
         
         # Query, Key, Value를 (num_head)개의 Head로 나누어 각기 다른 Linear projection을 통과시킴
-        Q = self.W_Q(enc).view(batch_size, seqlen, self.num_heads, self.hidden_units) 
-        K = self.W_K(enc).view(batch_size, seqlen, self.num_heads, self.hidden_units)
-        V = self.W_V(enc).view(batch_size, seqlen, self.num_heads, self.hidden_units)
+        Q = self.W_Q(enc).view(batch_size, seqlen, self.num_heads, self.split_size) 
+        K = self.W_K(enc).view(batch_size, seqlen, self.num_heads, self.split_size)
+        V = self.W_V(enc).view(batch_size, seqlen, self.num_heads, self.split_size)
 
         # Head별로 각기 다른 attention이 가능하도록 Transpose 후 각각 attention에 통과시킴
         Q, K, V = Q.transpose(1, 2), K.transpose(1, 2), V.transpose(1, 2)

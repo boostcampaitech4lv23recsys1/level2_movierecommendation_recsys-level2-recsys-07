@@ -181,7 +181,7 @@ def main():
         from tqdm import tqdm
         from models import BERT4Rec
 
-        user_item_seq, label, num_user, num_item, df = m(args)        
+        user_train, user_valid, num_user, num_item, df = m(args)        
         num_user = num_user
         num_item = num_item
 
@@ -203,11 +203,11 @@ def main():
             model.load_state_dict(torch.load(f))
             # model = torch.load(f)
 
-        seq_dataset = SeqDataset(user_item_seq, num_user, num_item, max_len, mask_prob)
+        seq_dataset = SeqDataset(user_train, num_user, num_item, max_len, mask_prob)
         data_loader = DataLoader(seq_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
         # inferenece
-        def bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len):
+        def bert4rec_inference(args, model, user_item_seq, user_valid, df, num_user, num_item, max_len):
             model.eval()
             model.to(device)
             pred_list = []
@@ -236,8 +236,8 @@ def main():
 
             for u in tqdm(users):
                 seq = (user_item_seq[u] + [num_item + 1])[-max_len:]
-                rated = set(user_item_seq[u] + label[u])
-                item_idx = [label[u][0]] + [random_neg(1, num_item, rated) for _ in range(num_item_sample)]
+                rated = set(user_item_seq[u] + user_valid[u])
+                item_idx = [user_valid[u][0]] + [random_neg(1, num_item, rated) for _ in range(num_item_sample)]
 
                 with torch.no_grad():
                     predictions = - model(np.array([seq]))
@@ -259,7 +259,7 @@ def main():
 
 
 
-        bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len)
+        bert4rec_inference(args, model, user_train, user_valid, df, num_user, num_item, max_len)
         print(f"finish core : {args.process_core}")
 
 

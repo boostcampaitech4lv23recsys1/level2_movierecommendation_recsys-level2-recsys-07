@@ -193,7 +193,7 @@ def main(args):
             users[u].append(i)
 
         for user in users:
-            user_train[user] = users[user][:]
+            user_train[user] = users[user][:-1]
             user_valid[user] = [users[user][-1]]
 
 

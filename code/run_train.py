@@ -216,7 +216,7 @@ def main():
 
         from preprocessing import main as m
         from tqdm import tqdm
-        user_item_seq, label, num_user, num_item, df = m(args)
+        user_train, user_valid, num_user, num_item, df = m(args)
 
         hidden_units = args.hidden_size
         num_heads    = args.num_attention_heads
@@ -233,7 +233,7 @@ def main():
         num_item = num_item
         max_len = args.max_seq_length
 
-        seq_dataset = SeqDataset(user_item_seq, num_user, num_item, max_len, mask_prob)
+        seq_dataset = SeqDataset(user_train, num_user, num_item, max_len, mask_prob)
 
         model = BERT4Rec(num_user, num_item, hidden_units, num_heads, num_layers, max_len, dropout_rate, device)
         model.to(device)
@@ -243,9 +243,9 @@ def main():
         criterion = nn.CrossEntropyLoss(ignore_index=0)
 
         bert4rec_train(args, model, data_loader, optimizer, criterion, device)
-        bert4rec_evaluate(args, model, user_item_seq, label, df, num_user, num_item, max_len)
+        bert4rec_evaluate(args, model, user_train, user_valid, df, num_user, num_item, max_len)
 
-        early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
+        # early_stopping = EarlyStopping(args.checkpoint_path, patience=10, verbose=True)
 
 
     else:

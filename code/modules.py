@@ -210,8 +210,8 @@ class MultiHeadAttention(nn.Module):
         super(MultiHeadAttention, self).__init__()
         self.num_heads = num_heads # head의 수
         self.hidden_units = hidden_units
-        self.split_size = int(hidden_units / self.num_heads)
-
+        self.split_size = int(self.hidden_units / self.num_heads)
+        
         # query, key, value, output 생성을 위해 Linear 모델 생성
         self.W_Q = nn.Linear(hidden_units, hidden_units, bias=False)
         self.W_K = nn.Linear(hidden_units, hidden_units, bias=False)

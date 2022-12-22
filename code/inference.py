@@ -181,7 +181,7 @@ def main():
         from tqdm import tqdm
         from models import BERT4Rec
 
-        user_item_seq, label, num_user, num_item, df = m(args, dtype='submission')        
+        user_train, user_valid, num_user, num_item, df = m(args, dtype='submission')        
         num_user = num_user
         num_item = num_item
 
@@ -203,11 +203,11 @@ def main():
             model.load_state_dict(torch.load(f))
             # model = torch.load(f)
 
-        seq_dataset = SeqDataset(user_item_seq, num_user, num_item, max_len, mask_prob)
+        seq_dataset = SeqDataset(user_train, num_user, num_item, max_len, mask_prob)
         data_loader = DataLoader(seq_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
 
         # inferenece
-        def bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len):
+        def bert4rec_inference(args, model, user_item_seq, user_valid, df, num_user, num_item, max_len):
             model.eval()
             model.to(device)
             pred_list = []
@@ -256,7 +256,7 @@ def main():
 
 
 
-        bert4rec_inference(args, model, user_item_seq, label, df, num_user, num_item, max_len)
+        bert4rec_inference(args, model, user_train, user_valid, df, num_user, num_item, max_len)
         print(f"finish core : {args.process_core}")
 
 

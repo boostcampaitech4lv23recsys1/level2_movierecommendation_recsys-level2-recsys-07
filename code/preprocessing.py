@@ -6,7 +6,7 @@ import numpy as np
 import os
 import pickle
 
-def main(args):
+def main(args, dtype='train'):
     model = args.model
     if model == 'multivae':
         def get_count(tp, id):
@@ -193,9 +193,11 @@ def main(args):
             users[u].append(i)
 
         for user in users:
-            user_train[user] = users[user][:]
-            user_valid[user] = [users[user][-1]]
-
+            if dtype == 'train':
+                user_train[user] = users[user][:-1]
+                user_valid[user] = [users[user][-1]]
+            elif dtype =='submission':
+                user_train[user] = users[user][:]
 
         # print(f'num users: {num_user}, num items: {num_item}')     
         return user_train, user_valid, num_user, num_item, df

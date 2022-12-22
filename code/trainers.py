@@ -540,10 +540,16 @@ def bert4rec_evaluate(args, model, user_item_seq, label, df, num_user, num_item,
     NDCG = 0.0 # NDCG@10
     HIT = 0.0 # HIT@10
 
-    num_item_sample = 100
-    num_user_sample = 1000
-    users = np.random.randint(0, num_user, num_user_sample) # 1000개만 sampling 하여 evaluation
-    for u in users:
+    # num_item_sample = 100
+    # num_user_sample = 1000
+    # users = np.random.randint(0, num_user, num_user_sample) # 1000개만 sampling 하여 evaluation
+
+    users = df['user_idx'].unique()
+    num_item_sample = num_item
+    num_user_sample = num_user
+
+
+    for u in tqdm(users):
         seq = (user_item_seq[u] + [num_item + 1])[-max_len:]
         rated = set(user_item_seq[u] + label[u])
         item_idx = [label[u][0]] + [random_neg(1, num_item + 1, rated) for _ in range(num_item_sample)]

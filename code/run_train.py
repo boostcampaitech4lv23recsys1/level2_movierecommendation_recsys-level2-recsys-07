@@ -40,12 +40,12 @@ def main():
     # model args
     parser.add_argument("--model_name", default="Finetune_full", type=str)
     parser.add_argument(
-        "--hidden_size", type=int, default=50, help="hidden size of transformer model"
+        "--hidden_size", type=int, default=128, help="hidden size of transformer model"
     )
     parser.add_argument(
         "--num_hidden_layers", type=int, default=2, help="number of layers"
     )
-    parser.add_argument("--num_attention_heads", default=1, type=int)
+    parser.add_argument("--num_attention_heads", default=4, type=int)
     parser.add_argument("--hidden_act", default="gelu", type=str)  # gelu relu
     parser.add_argument(
         "--attention_probs_dropout_prob",
@@ -64,7 +64,7 @@ def main():
     parser.add_argument(
         "--batch_size", type=int, default=256, help="number of batch_size"
     )
-    parser.add_argument("--epochs", type=int, default=1, help="number of epochs")
+    parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
     parser.add_argument("--log_freq", type=int, default=1, help="per epoch print res")
     parser.add_argument("--seed", default=42, type=int)
@@ -211,6 +211,8 @@ def main():
         args_str = f"{args.model}-{args.data_name}"
         checkpoint = args_str + ".pt"
         args.checkpoint_path = os.path.join(args.output_dir, checkpoint)
+
+        print(str(args))
 
         from preprocessing import main as m
         from tqdm import tqdm

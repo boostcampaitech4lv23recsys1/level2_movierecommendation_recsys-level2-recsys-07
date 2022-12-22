@@ -34,12 +34,12 @@ def main():
     # model args
     parser.add_argument("--model_name", default="Finetune_full", type=str)
     parser.add_argument(
-        "--hidden_size", type=int, default=50, help="hidden size of transformer model"
+        "--hidden_size", type=int, default=128, help="hidden size of transformer model"
     )
     parser.add_argument(
         "--num_hidden_layers", type=int, default=2, help="number of layers"
     )
-    parser.add_argument("--num_attention_heads", default=1, type=int)
+    parser.add_argument("--num_attention_heads", default=4, type=int)
     parser.add_argument("--hidden_act", default="gelu", type=str)  # gelu relu
     parser.add_argument(
         "--attention_probs_dropout_prob",
@@ -181,7 +181,7 @@ def main():
         from tqdm import tqdm
         from models import BERT4Rec
 
-        user_item_seq, label, num_user, num_item, df = m(args)        
+        user_item_seq, label, num_user, num_item, df = m(args, dtype='submission')        
         num_user = num_user
         num_item = num_item
 
@@ -236,14 +236,11 @@ def main():
 
             for u in tqdm(users):
                 seq = (user_item_seq[u] + [num_item + 1])[-max_len:]
-                rated = set(user_item_seq[u] + label[u])
-                item_idx = [label[u][0]] + [random_neg(1, num_item, rated) for _ in range(num_item_sample)]
+                rated = set(user_item_seq[u]) # user가 본 아이템
+                item_idx = list(set([random_neg(1, num_item + 1, rated) for _ in range(num_item_sample)])) # 유저가 보지 않은 아이템을 뽑기 위함
 
                 with torch.no_grad():
                     predictions = - model(np.array([seq]))
-                    # 9개만 inference되는 user_idx
-                    # if u == 8070:
-                    #     print('user : 8070')
                     predictions = predictions[0][-1][item_idx]
 
                     # prediction_list = (predictions.argsort().argsort()[:10]).tolist()

@@ -60,7 +60,7 @@ def rec(pids):
     p = torch.Tensor(p).to(device)
 
 
-    val = (train_items_A @ p).reshape(-1)  # shape: (25000,)
+    val = (train_items_A @ p).reshape(-1)  # shape: (31360,)
 
     items_already = movlst.loc[pid, "iid"]
 
@@ -70,7 +70,6 @@ def rec(pids):
 
     cand_item_idx = cand_item_idx[np.isin(cand_item_idx, items_already) == False][:10] # user가 본 적 없는 영화들
     rec_item_idx = [movie_iid_item[i] for i in cand_item_idx]
-
 
     res.append({
                 "user": movlst['user'][pid],

@@ -302,12 +302,15 @@ class MultiVAEDataLoader():
 
 # bert4rec Dataset
 class SeqDataset(Dataset):
-    def __init__(self, user_item_seq, num_user, num_item, max_len, mask_prob, data_type='train'):
+    def __init__(self, args, user_item_seq, num_user, num_item, data_type='train'):
+        
+        self.args = args
         self.user_item_seq = user_item_seq
         self.num_user = num_user
         self.num_item = num_item
-        self.max_len = max_len
-        self.mask_prob = mask_prob
+        
+        self.max_len = self.args.max_seq_length
+        self.mask_prob = self.args.mask_prob
         self.data_type = data_type
 
 
@@ -317,32 +320,60 @@ class SeqDataset(Dataset):
 
     def __getitem__(self, user):
         # iterator를 구동할 때 사용됩니다.
+        user_id = user
         items = self.user_item_seq[user]
-        tokens = []
-        labels = []
+        
+        if self.data_type == "train":
+            input_ids = items[:-3]
+            target_pos = items[1:-2]
+            answer = [0]  # no use
 
-        for item in items:
-            prob = np.random.random()
-            if prob < self.mask_prob:
-                prob /= self.mask_prob
+        elif self.data_type == "valid":
+            input_ids = items[:-2]
+            target_pos = items[1:-1]
+            answer = [items[-2]]
 
-                # BERT 학습
-                if prob < 0.8:
-                    # masking
-                    tokens.append(self.num_item + 1)  # mask_index: num_item + 1, 0: pad, 1~num_item: item index
-                elif prob < 0.9:
-                    tokens.append(np.random.randint(1, self.num_item+1))  # item random sampling
+        elif self.data_type == "test":
+            input_ids = items[:-1]
+            target_pos = items[1:]
+            answer = [items[-1]]
+            
+        pad_len = self.max_len - len(input_ids)
+        input_ids = [0] * pad_len + input_ids
+        input_ids = input_ids[-self.max_len :]
+        
+        assert len(input_ids) == self.max_len
+        
+        if self.data_type == 'train': 
+            
+            tokens = []
+            labels = []
+
+            for item in input_ids:
+                prob = np.random.random()
+                if prob < self.mask_prob:
+                    prob /= self.mask_prob
+
+                    # BERT 학습
+                    if prob < 0.8:
+                        # masking
+                        tokens.append(self.num_item + 1)  # mask_index: num_item + 1, 0: pad, 1~num_item: item index
+                    elif prob < 0.9:
+                        tokens.append(np.random.randint(1, self.num_item+1))  # item random sampling
+                    else:
+                        tokens.append(item)
+                    labels.append(item)  # 학습에 사용
                 else:
                     tokens.append(item)
-                labels.append(item)  # 학습에 사용
-            else:
-                tokens.append(item)
-                labels.append(0)  # 학습에 사용 X, trivial
-        tokens = tokens[-self.max_len:]
-        labels = labels[-self.max_len:]
-        mask_len = self.max_len - len(tokens)
+                    labels.append(0)  # 학습에 사용 X, trivial
+            tokens = tokens[-self.max_len:]
+            labels = labels[-self.max_len:]
+            mask_len = self.max_len - len(tokens)
 
-        # zero padding
-        tokens = [0] * mask_len + tokens
-        labels = [0] * mask_len + labels
-        return torch.LongTensor(tokens), torch.LongTensor(labels)
+            # zero padding
+            tokens = [0] * mask_len + tokens
+            labels = [0] * mask_len + labels
+            return torch.LongTensor(tokens), torch.LongTensor(labels)
+        else:
+            return torch.tensor(user_id, dtype=torch.long), torch.tensor(input_ids, dtype=torch.long), torch.tensor(answer, dtype=torch.long)
+            

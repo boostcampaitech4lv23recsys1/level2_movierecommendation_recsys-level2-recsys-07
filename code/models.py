@@ -344,24 +344,29 @@ class MultiVAE(nn.Module):
 
 
 class BERT4Rec(nn.Module):
-    def __init__(self, num_user, num_item, hidden_units, num_heads, num_layers, max_len, dropout_rate, device):
+    def __init__(self, args, num_user, num_item, device):
         super(BERT4Rec, self).__init__()
-
+        
+        self.args = args
         self.num_user = num_user
         self.num_item = num_item
-        self.hidden_units = hidden_units
-        self.num_heads = num_heads
-        self.num_layers = num_layers
+        
+        self.hidden_units = self.args.hidden_size
+        self.num_heads = self.args.num_attention_heads
+        self.num_layers = self.args.num_hidden_layers
+        self.dropout_rate = self.args.hidden_dropout_prob
+        self.max_len = self.args.max_seq_length
+        
         self.device = device
         
-        self.item_emb = nn.Embedding(num_item+2, hidden_units, padding_idx=0)
+        self.item_emb = nn.Embedding(num_item+2, self.hidden_units, padding_idx=0)
         # item_emb에서 처음으로 나오는 아이템을 표현할 때 모두 0으로 처리해줌
-        self.pos_emb = nn.Embedding(max_len, hidden_units) # learnable positional encoding
-        self.dropout = nn.Dropout(dropout_rate)
-        self.emb_layernorm = nn.LayerNorm(hidden_units, eps=1e-6)
+        self.pos_emb = nn.Embedding(self.max_len, self.hidden_units) # learnable positional encoding
+        self.dropout = nn.Dropout(self.dropout_rate)
+        self.emb_layernorm = nn.LayerNorm(self.hidden_units, eps=1e-6)
         
-        self.blocks = nn.ModuleList([BERT4RecBlock(num_heads, hidden_units, dropout_rate) for _ in range(num_layers)])
-        self.out = nn.Linear(hidden_units, num_item+1)
+        self.blocks = nn.ModuleList([BERT4RecBlock(self.num_heads, self.hidden_units, self.dropout_rate) for _ in range(self.num_layers)])
+        self.out = nn.Linear(self.hidden_units, num_item+1)
       
     def forward(self, log_seqs):
         seqs = self.item_emb(torch.LongTensor(log_seqs).to(self.device))
@@ -373,4 +378,4 @@ class BERT4Rec(nn.Module):
         for block in self.blocks:
             seqs, attn_dist = block(seqs, mask)
         out = self.out(seqs)
-        return out
+        return out, seqs

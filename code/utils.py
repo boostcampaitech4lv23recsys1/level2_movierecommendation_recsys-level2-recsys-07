@@ -36,6 +36,14 @@ def neg_sample(item_set, item_size):
     return item
 
 
+def random_neg(l, r, s):
+    # log에 존재하는 아이템과 겹치지 않도록 sampling
+    t = np.random.randint(l, r)
+    while t in s:
+        t = np.random.randint(l, r)
+    return t
+
+
 class EarlyStopping:
     """Early stops the training if validation loss doesn't improve after a given patience."""
 
@@ -387,3 +395,21 @@ def Recall_at_k_batch(X_pred, heldout_batch, k=100):
         np.float32)
     recall = tmp / np.minimum(k, X_true_binary.sum(axis=1))
     return recall
+
+
+def get_full_sort_score(epoch, answers, pred_list):
+    recall, ndcg = [], []
+    for k in [5, 10]:
+        recall.append(recall_at_k(answers, pred_list, k))
+        ndcg.append(ndcg_k(answers, pred_list, k))
+    post_fix = {
+        "Epoch": epoch,
+        "RECALL@5": "{:.4f}".format(recall[0]),
+        "NDCG@5": "{:.4f}".format(ndcg[0]),
+        "RECALL@10": "{:.4f}".format(recall[1]),
+        "NDCG@10": "{:.4f}".format(ndcg[1]),
+    }
+    print(post_fix)
+    print()
+
+    return [recall[0], ndcg[0], recall[1], ndcg[1]], str(post_fix)

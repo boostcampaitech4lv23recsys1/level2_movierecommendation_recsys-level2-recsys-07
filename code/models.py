@@ -329,9 +329,6 @@ class MultiVAE(nn.Module):
             # Normal Initialization for Biases
             layer.bias.data.normal_(0.0, 0.001)
 
-
-
-
     def loss_function_vae(recon_x, x, mu, logvar, anneal=1.0):
         BCE = -torch.mean(torch.sum(F.log_softmax(recon_x, 1) * x, -1))
         KLD = -0.5 * torch.mean(torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1))
@@ -350,15 +347,15 @@ class MultiDAE(nn.Module):
 
     def __init__(self, p_dims, q_dims=None, dropout=0.5):
         super(MultiDAE, self).__init__()
-        self.p_dims = p_dims
+        self.p_dims = p_dims    # [200, 600, 6807 (item 수)]
         if q_dims:
             assert q_dims[0] == p_dims[-1], "In and Out dimensions must equal to each other"
             assert q_dims[-1] == p_dims[0], "Latent dimension for p- and q- network mismatches."
             self.q_dims = q_dims
         else:
-            self.q_dims = p_dims[::-1]
+            self.q_dims = p_dims[::-1]  # [6807, 600, 200]
 
-        self.dims = self.q_dims + self.p_dims[1:]
+        self.dims = self.q_dims + self.p_dims[1:]   # [6807, 600, 200, 600, 6807]
         self.layers = nn.ModuleList([nn.Linear(d_in, d_out) for
             d_in, d_out in zip(self.dims[:-1], self.dims[1:])])
         self.drop = nn.Dropout(dropout)
@@ -366,7 +363,7 @@ class MultiDAE(nn.Module):
         self.init_weights()
     
     def forward(self, input):
-        h = F.normalize(input)
+        h = F.normalize(input)  # input shape: [500, 6807]
         h = self.drop(h)
 
         for i, layer in enumerate(self.layers):

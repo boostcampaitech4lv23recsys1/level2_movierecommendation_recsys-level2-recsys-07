@@ -415,9 +415,6 @@ def evaluate(model, criterion, data_tr, data_te, batch_size, N, device, total_an
               recon_batch = model(data_tensor)
               loss = criterion(recon_batch, data_tensor)
 
-
-
-
             total_loss += loss.item()
 
             # Exclude examples from training set

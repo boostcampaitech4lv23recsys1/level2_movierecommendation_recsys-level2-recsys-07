@@ -166,7 +166,7 @@ def main():
 
         final = final.sort_values(by='user', ascending=True)
 
-        final.to_csv('/opt/ml/input/code/output/submission_multivae.csv')
+        final.to_csv('/opt/ml/input/code/output/submission_multivae.csv', index=False)
 
 #multidae
     elif args.model == 'multidae':
@@ -177,13 +177,13 @@ def main():
 
         loader = MultiVAEDataLoader(args.data)
 
-        test_data = loader.load_data('test')
+        submit_data = loader.load_data('submit')
 
         optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
         criterion = MultiDAE.loss_function_dae
-        N = test_data.shape[0]
+        N = submit_data.shape[0]
         # Run on test data.
-        final = make_submission(model = model, criterion = criterion, data_tr = test_data, is_VAE=False, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
+        final = make_submission(model = model, criterion = criterion, data_tr = submit_data, is_VAE=False, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
         print('=' * 89)
         print(final)
         print(len(final))
@@ -212,7 +212,7 @@ def main():
         final['user'] = ee
         final = final[['user','item']]
         final = final.sort_values(by='user', ascending=True)
-        final.to_csv('/opt/ml/input/code/output/submission_multidae.csv')
+        final.to_csv('/opt/ml/input/code/output/submission_multidae.csv', index=False)
 #################################################################################################
 #셔플은 preprocessing에 91,92줄로 하고, 91,92번째줄 돌아가면 셔플 하는거고 주석처리하면 서플 안하는 경우 입니다.
 ####셔플 ㄴㄴ#####################################################################################
@@ -235,7 +235,7 @@ def main():
         # final['item'] = ee
 
         # final = final[['user','item']]
-        # final.to_csv('/opt/ml/input/code/output/submission_multidae.csv')
+        # final.to_csv('/opt/ml/input/code/output/submission_multidae.csv', index=False)
 ##################################################################################################
 
 

@@ -204,7 +204,7 @@ def main():
         n_items = loader.load_n_items()
         train_data = loader.load_data('train')
         vad_data_tr, vad_data_te = loader.load_data('validation')
-        # test_data_tr, test_data_te = loader.load_data('test')
+        test_data_tr, test_data_te = loader.load_data('test')
 
         N = train_data.shape[0]
         idxlist = list(range(N))
@@ -213,7 +213,7 @@ def main():
         # Build the model
         ###############################################################################
 
-        p_dims = [400, 1200, n_items]
+        p_dims = [200, 600, n_items]
         model = MultiDAE(p_dims).to(device)
 
         optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
@@ -228,8 +228,12 @@ def main():
         answer = []
         for epoch in range(1, args.epochs + 1):
             epoch_start_time = time.time()
-            train(model, idxlist, train_data, device, epoch, is_VAE=False, criterion = criterion, optimizer = optimizer, N = N, batch_size = args.batch_size, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap, log_interval = args.log_interval)
-            val_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = vad_data_tr, data_te = vad_data_te, is_VAE=False, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
+            train(model, idxlist, train_data, device, epoch, is_VAE=False, criterion = criterion, optimizer = optimizer, N = N, 
+                    batch_size = args.batch_size, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap, 
+                    log_interval = args.log_interval)
+            val_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = vad_data_tr, data_te = vad_data_te, is_VAE=False, 
+                                                batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, 
+                                                anneal_cap = args.anneal_cap)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
                     'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
@@ -246,7 +250,18 @@ def main():
                     torch.save(model, f)
                 best_n100 = n100
 
+        # Load the best saved model.
+        with open(args.save + '/multidae.pt', 'rb') as f:
+            model = torch.load(f)
 
+        # Run on test data.
+        test_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = test_data_tr, data_te = test_data_te, is_VAE=False,
+                                            batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, 
+                                            anneal_cap = args.anneal_cap)
+        print('=' * 89)
+        print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
+                'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
+        print('=' * 89)
 
 
     else:

@@ -176,7 +176,7 @@ def main():
                             answer_list, answers.cpu().data.numpy(), axis=0
                             )
                         
-                    vbar.set_description(f'Epoch: {epoch:3d}| Step: {step:3d}| Valid')
+                    vbar.set_description(f'Epoch: {epoch:3d}| Step: {step:3d}| Valid Progress')
                     
             scores, _ = get_full_sort_score(epoch,answer_list, pred_list)
             early_stopping(np.array(scores[-1:]), model)

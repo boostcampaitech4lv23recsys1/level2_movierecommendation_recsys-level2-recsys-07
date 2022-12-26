@@ -1,5 +1,5 @@
 import pandas as pd
-
+from args import parse_args
 #multivate 추가
 import argparse
 import numpy as np
@@ -7,17 +7,12 @@ import os
 import pickle
 
 def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--model', default='multivae', type=str)
-    parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
-                        help='Movielens dataset location')
-    args = parser.parse_args()
-
+    args = parse_args()
+    
     if args.model == 'multivae':
 
         def get_count(tp, id):
-            playcount_groupbyid = tp[[id]].groupby(id, as_index=False)
+            playcount_groupbyid = tp[[id]].groupby(id, as_index=True)
             count = playcount_groupbyid.size()
 
             return count

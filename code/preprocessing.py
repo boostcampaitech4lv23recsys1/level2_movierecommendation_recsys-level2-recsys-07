@@ -5,11 +5,12 @@ import argparse
 import numpy as np
 import os
 import pickle
+import tqdm
 
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model', default='multivae', type=str)
+    parser.add_argument('--model', default='deepfm', type=str)
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
     args = parser.parse_args()
@@ -171,8 +172,154 @@ def main():
         # print(test_data_te)
 
 
+    elif args.model == 'deepfm':
+
+        # 1. Rating df 생성
+        rating_data = "/opt/ml/input/data/train/train_ratings.csv"
+
+        raw_rating_df = pd.read_csv(rating_data)
 
 
+        b = raw_rating_df.groupby('item').count()
+        b = b[b['user'] > 197]
+        b = b[:]   #이걸로 네거티브 샘플링 갯수 조절
+        movies_list = list(b.index)
+
+        raw_rating_df['rating'] = 1.0 # implicit feedback
+        raw_rating_df.drop(['time'],axis=1,inplace=True)
+        print("Raw rating df")
+        print(raw_rating_df)
+
+        users = set(raw_rating_df.loc[:, 'user'])
+        items = set(raw_rating_df.loc[:, 'item'])
+
+        #2. Genre df 생성
+        genre_data = "/opt/ml/input/data/train/genres.tsv"
+
+        raw_genre_df = pd.read_csv(genre_data, sep='\t')
+
+        raw_genre_df = raw_genre_df.drop_duplicates(subset=['item']) #item별 하나의 장르만 남도록 drop
+
+        genre_dict = {genre:i for i, genre in enumerate(set(raw_genre_df['genre']))}
+
+        raw_genre_df['genre']  = raw_genre_df['genre'].map(lambda x : genre_dict[x]) #genre id로 변경
+        print("Raw genre df - changed to id")
+        print(raw_genre_df)
+
+        #2. writer df 생성
+        writer_data = "/opt/ml/input/data/train/writers.tsv"
+        raw_writer_df = pd.read_csv(writer_data, sep='\t')
+
+        raw_writer_df = raw_writer_df.drop_duplicates(subset=['item']) #item별 하나의 장르만 남도록 drop
+
+        writer_dict = {writer:i for i, writer in enumerate(set(raw_writer_df['writer']))}
+
+        raw_writer_df['writer']  = raw_writer_df['writer'].map(lambda x : writer_dict[x]) #writer id로 변경
+        print("Raw writer df - changed to id")
+        print(raw_writer_df)
+
+        #2. years df 생성
+        years_data = "/opt/ml/input/data/train/years.tsv"
+        raw_years_df = pd.read_csv(years_data, sep='\t')
+
+        raw_years_df = raw_years_df.drop_duplicates(subset=['item']) #item별 하나의 장르만 남도록 drop
+
+        years_dict = {years:i for i, years in enumerate(set(raw_years_df['year']))}
+
+        raw_years_df['year']  = raw_years_df['year'].map(lambda x : years_dict[x]) #writer id로 변경
+        print("Raw years df - changed to id")
+        print(raw_years_df)
+
+        #2. director df 생성
+        director_data = "/opt/ml/input/data/train/directors.tsv"
+        raw_director_df = pd.read_csv(director_data, sep='\t')
+
+        raw_director_df = raw_director_df.drop_duplicates(subset=['item']) #item별 하나의 장르만 남도록 drop
+
+        director_dict = {director:i for i, director in enumerate(set(raw_director_df['director']))}
+
+        raw_director_df['director']  = raw_director_df['director'].map(lambda x : director_dict[x]) #writer id로 변경
+        print("Raw director df - changed to id")
+        print(raw_director_df)
+
+        #2. title df 생성
+        title_data = "/opt/ml/input/data/train/titles.tsv"
+        raw_title_df = pd.read_csv(title_data, sep='\t')
+
+        raw_title_df = raw_title_df.drop_duplicates(subset=['item']) #item별 하나의 장르만 남도록 drop
+
+        title_dict = {title:i for i, title in enumerate(set(raw_title_df['title']))}
+
+        raw_title_df['title']  = raw_title_df['title'].map(lambda x : title_dict[x]) #writer id로 변경
+        print("Raw titler df - changed to id")
+        print(raw_title_df)
+
+        # 3. Negative instance 생성
+        print("Create Nagetive instances")
+        user_group_dfs = list(raw_rating_df.groupby('user')['item'])
+
+        first_row = True
+        user_neg_dfs = pd.DataFrame()
+        for u, u_items in user_group_dfs:
+            u_items = set(u_items)
+            i_user_neg_item = [i for i in movies_list if i not in u_items] #이거 끄면됨#b
+            i_user_neg_item = np.array(i_user_neg_item) #이거 끄면됨#b
+            num_negative = len(i_user_neg_item) #이거 끄면됨#b
+            
+            i_user_neg_df = pd.DataFrame({'user': [u]*num_negative, 'item': i_user_neg_item, 'rating': [0]*num_negative})
+            if first_row == True:
+                user_neg_dfs = i_user_neg_df
+                first_row = False
+            else:
+                user_neg_dfs = pd.concat([user_neg_dfs, i_user_neg_df], axis = 0, sort=False)
+
+        raw_rating_df = pd.concat([raw_rating_df, user_neg_dfs], axis = 0, sort=False)
+
+        # 4. Join dfs
+        joined_rating_df = pd.merge(raw_rating_df, raw_genre_df, left_on='item', right_on='item', how='inner')
+        print("Joined rating df")
+        print(joined_rating_df)
+
+        # 5. user, item을 zero-based index로 mapping
+        users = list(set(joined_rating_df.loc[:,'user']))
+        users.sort()
+        items =  list(set((joined_rating_df.loc[:, 'item'])))
+        items.sort()
+        genres =  list(set((joined_rating_df.loc[:, 'genre'])))
+        genres.sort()
+
+        if len(users)-1 != max(users):
+            users_dict = {users[i]: i for i in range(len(users))}
+            users_dict_reverse = {i : users[i] for i in range(len(users))}
+            joined_rating_df['user']  = joined_rating_df['user'].map(lambda x : users_dict[x])
+            users = list(set(joined_rating_df.loc[:,'user']))
+            
+        if len(items)-1 != max(items):
+            items_dict = {items[i]: i for i in range(len(items))}
+            items_dict_reverse = {i : items[i] for i in range(len(items))}
+            joined_rating_df['item']  = joined_rating_df['item'].map(lambda x : items_dict[x])
+            items =  list(set((joined_rating_df.loc[:, 'item'])))
+
+        joined_rating_df = joined_rating_df.sort_values(by=['user'])
+        joined_rating_df.reset_index(drop=True, inplace=True)
+
+        data = joined_rating_df
+        print("Data")
+        print(data)
+
+        n_data = len(data)
+        n_user = len(users)
+        n_item = len(items)
+        n_genre = len(genres)
+
+        print("# of data : {}\n# of users : {}\n# of items : {}\n# of genres : {}".format(n_data, n_user, n_item, n_genre))
+
+        data.to_csv('/opt/ml/input/data/train/deepfm_data.csv')
+
+        with open ('/opt/ml/input/data/train/pro_sg/users_dict_reverse_deepfm.pickle', 'wb') as fw:
+            pickle.dump(users_dict_reverse, fw)
+        with open ('/opt/ml/input/data/train/pro_sg/items_dict_reverse_deepfm.pickle', 'wb') as fw:
+            pickle.dump(items_dict_reverse, fw)
 
     else:
 

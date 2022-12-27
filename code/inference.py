@@ -17,8 +17,8 @@ from utils import (
 
 #multivae
 from trainers import make_submission
-from datasets import MultiVAEDataLoader
-from models import MultiVAE
+from datasets import MultiVAEDataLoader, DeepfmDataset
+from models import MultiVAE, DeepFM
 import torch.optim as optim
 import pandas as pd
 import pickle
@@ -76,7 +76,7 @@ def main():
 
 
     #multivae
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    parser.add_argument('--model', default='deepfm', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -167,6 +167,77 @@ def main():
 
         final.to_csv('/opt/ml/input/code/output/submission_multivae.csv')
 
+    elif args.model =='deepfm':
+        print('deepfm')
+
+        data = pd.read_csv('/opt/ml/input/data/train/mission3_data_3397.csv')
+        n_data = len(data)
+        n_user = len(data['user'].unique())
+        n_item = len(data['item'].unique())
+        n_genre = len(data['genre'].unique())
+        offsets = [0, n_user, n_user+n_item]
+
+        #6. feature matrix X, label tensor y 생성
+        user_col = torch.tensor(data.loc[:,'user'])
+        item_col = torch.tensor(data.loc[:,'item'])
+        genre_col = torch.tensor(data.loc[:,'genre'])
+
+        for col, offset in zip([user_col, item_col, genre_col], offsets):
+            col += offset
+
+
+        X = torch.cat([user_col.unsqueeze(1), item_col.unsqueeze(1), genre_col.unsqueeze(1)], dim=1)
+        y = torch.tensor(list(data.loc[:,'rating']))
+        #inference - inference
+        dataset = DeepfmDataset(X, y)
+        
+        with open('/opt/ml/input/code/output/deepfm.pt', 'rb') as f:
+            model = torch.load(f)
+
+        model.eval()
+
+        all_data_loader = DataLoader(dataset, batch_size=1024, shuffle=False)
+        final_list = []
+
+        with torch.no_grad():
+
+            for x, y in all_data_loader:
+                x, y = x.to(device), y.to(device)
+                output = model(x)
+                output = output.cpu().numpy()
+                final_list.append(pd.DataFrame(output.reshape(-1,1)))
+
+        final = pd.concat(final_list)
+        final = final.reset_index(drop = True)
+
+
+        df = data.copy()
+        df = df.drop(['Unnamed: 0', 'rating','genre'], axis=1)
+
+        with open('/opt/ml/input/data/train/pro_sg/users_dict_reverse_deepfm.pickle', 'rb') as fr:
+            aa = pickle.load(fr)
+
+        ee = df['user'].apply(lambda x: aa[x])
+        df['user'] = ee
+
+        with open('/opt/ml/input/data/train/pro_sg/items_dict_reverse_deepfm.pickle', 'rb') as fr:
+            aa = pickle.load(fr)
+
+        ee = df['item'].apply(lambda x: aa[x])
+        df['item'] = ee
+
+        train = pd.read_csv('/opt/ml/input/data/train/train_ratings.csv')
+        train = train.drop('time', axis = 1)
+
+        total = pd.merge(df, train, how='outer', indicator = True)
+        total = total.query('_merge == "left_only"').drop(columns=['_merge'])
+        total['rating'] = final
+        total = total.sort_values(by='rating',ascending=False).groupby('user').head(10) #
+        total = total.sort_values(by='user')
+        total = total.drop('rating',axis=1)
+        total = total.reset_index(drop=True)
+        total.to_csv('/opt/ml/input/code/output/submission_deepfm.csv')
+
     else:
         args.data_file = args.data_dir + "train_ratings.csv"
         item2attribute_file = args.data_dir + args.data_name + "_item2attributes.json"
@@ -206,6 +277,7 @@ def main():
         preds = trainer.submission(0)
 
         generate_submission_file(args.data_file, preds)
+
 
 
 if __name__ == "__main__":

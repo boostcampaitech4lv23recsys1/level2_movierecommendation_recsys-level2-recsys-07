@@ -1,11 +1,11 @@
 import argparse
 import os
-
+import pandas as pd
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
-from datasets import SASRecDataset, MultiVAEDataLoader
+from datasets import SASRecDataset, MultiVAEDataLoader, DeepfmDataset
 from models import S3RecModel
 from trainers import FinetuneTrainer
 from utils import (
@@ -17,11 +17,12 @@ from utils import (
 )
 
 #multivate
-from models import MultiVAE
+from models import MultiVAE, DeepFM
 import time
 from trainers import train, evaluate
 import torch.optim as optim
-
+import torch.nn as nn
+import tqdm
 
 def main():
     parser = argparse.ArgumentParser()
@@ -57,7 +58,7 @@ def main():
     parser.add_argument(
         "--batch_size", type=int, default=256, help="number of batch_size"
     )
-    parser.add_argument("--epochs", type=int, default=50, help="number of epochs")
+    parser.add_argument("--epochs", type=int, default=2, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
     parser.add_argument("--log_freq", type=int, default=1, help="per epoch print res")
     parser.add_argument("--seed", default=42, type=int)
@@ -82,7 +83,7 @@ def main():
     # parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 
 
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    parser.add_argument('--model', default='deepfm', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -106,7 +107,7 @@ def main():
                         help='report interval')
     parser.add_argument('--save', type=str, default='/opt/ml/input/code/output/multivae.pt',
                         help='path to save the final model')
-    args = parser.parse_args([])
+    args = parser.parse_args()
 
     # Set the random seed manually for reproductibility.
     torch.manual_seed(args.seed)
@@ -179,6 +180,83 @@ def main():
                     torch.save(model, f)
                 best_n100 = n100
 
+    elif args.model == 'deepfm':
+        print('deepfm')
+        data = pd.read_csv('/opt/ml/input/data/train/mission3_data_500.csv')
+        n_data = len(data)
+        n_user = len(data['user'].unique())
+        n_item = len(data['item'].unique())
+        n_genre = len(data['genre'].unique())
+
+        #6. feature matrix X, label tensor y 생성
+        user_col = torch.tensor(data.loc[:,'user'])
+        item_col = torch.tensor(data.loc[:,'item'])
+        genre_col = torch.tensor(data.loc[:,'genre'])
+
+        offsets = [0, n_user, n_user+n_item]
+
+        for col, offset in zip([user_col, item_col, genre_col], offsets):
+            col += offset
+
+        X = torch.cat([user_col.unsqueeze(1), item_col.unsqueeze(1), genre_col.unsqueeze(1)], dim=1)
+        y = torch.tensor(list(data.loc[:,'rating']))
+
+        dataset = DeepfmDataset(X, y)
+        train_ratio = 0.9
+
+        train_size = int(train_ratio * len(data))
+        test_size = len(data) - train_size
+        train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size])
+
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+
+        device = torch.device('cuda')
+        input_dims = [n_user, n_item, n_genre]
+        embedding_dim = 10
+        model = DeepFM(input_dims, embedding_dim, mlp_dims=[30, 20, 10]).to(device)
+        bce_loss = nn.BCELoss() # Binary Cross Entropy loss
+        lr, num_epochs = args.lr, args.epochs
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+        early_cnt = 0
+        best_acc = -np.inf
+        for e in range(num_epochs) :
+            for x, y in train_loader:
+                x, y = x.to(device), y.to(device)
+                model.train()
+                optimizer.zero_grad()
+                output = model(x)
+                loss = bce_loss(output, y.float())
+                loss.backward()
+                optimizer.step()
+
+            correct_result_sum = 0
+            for x, y in test_loader:
+                x, y = x.to(device), y.to(device)
+                model.eval()
+                output = model(x)
+                result = torch.round(output)
+                correct_result_sum += (result == y).sum().float()
+
+            acc = correct_result_sum/len(test_dataset)*100
+            
+            if acc > best_acc:
+                
+                # with open(args.save + '/deepfm.pt', 'wb') as f:
+                with open('/opt/ml/input/code/output' + '/deepfm.pt', 'wb') as f:
+                    torch.save(model, f)
+                print('save new pt')
+                best_acc = acc
+            
+            else:
+                early_cnt += 1
+                
+
+            if early_cnt > 2:
+                print('early stoping')
+                break
+                
+            print("Acc : {:.2f}%".format(acc.item()), 'early:' ,early_cnt, 'b-acc:', best_acc)
 
     else:
         model = S3RecModel(args=args)

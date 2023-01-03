@@ -207,7 +207,14 @@ cython_debug/
 *.pt
 =======
 *.json
-*.txt
+# *.txt
 *.wandb
 *.yaml
 *.npy
+data/*
+exp_ipynb/*
+log_tensorboard/*
+recbole/log/*
+recbole/log_tensorboard/*
+recbole/wandb/*
+recbole/save/*

@@ -202,12 +202,28 @@ cython_debug/
 *.docx
 *.pdf
 *.xlsx
-<<<<<<< HEAD
 *wandb/
 *.pt
-=======
 *.json
-*.txt
+# *.txt
 *.wandb
 *.yaml
 *.npy
+log_tensorboard/*
+log/*
+KGAT-pytorch/data/*
+KGAT-pytorch/datasets/*
+data/*
+exp_ipynb/*
+recbole/log/*
+recbole/log_tensorboard/*
+recbole/ray_log/*
+recbole/saved/*
+*.out
+data/*
+exp_ipynb/*
+log_tensorboard/*
+recbole/log/*
+recbole/log_tensorboard/*
+recbole/wandb/*
+recbole/save/*

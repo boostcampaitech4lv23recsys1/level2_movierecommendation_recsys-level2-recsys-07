@@ -17,7 +17,7 @@ from utils import (
 )
 
 #multivate
-from models import MultiVAE
+from models import MultiVAE, MultiDAE
 import time
 from trainers import train, evaluate
 import torch.optim as optim
@@ -55,7 +55,7 @@ def main():
     # train args
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate of adam")
     parser.add_argument(
-        "--batch_size", type=int, default=256, help="number of batch_size"
+        "--batch_size", type=int, default=500, help="number of batch_size"
     )
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
@@ -63,7 +63,7 @@ def main():
     parser.add_argument("--seed", default=42, type=int)
 
     parser.add_argument(
-        "--weight_decay", type=float, default=0.0, help="weight_decay of adam"
+        "--weight_decay", type=float, default=0.01, help="weight_decay of adam"
     )
     parser.add_argument(
         "--adam_beta1", type=float, default=0.9, help="adam first beta value"
@@ -82,7 +82,7 @@ def main():
     # parser = argparse.ArgumentParser(description='PyTorch Variational Autoencoders for Collaborative Filtering')
 
 
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    parser.add_argument('--model', default='multidae', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -104,9 +104,9 @@ def main():
                         help='use CUDA')
     parser.add_argument('--log_interval', type=int, default=100, metavar='N',
                         help='report interval')
-    parser.add_argument('--save', type=str, default='/opt/ml/input/code/output/multivae.pt',
+    parser.add_argument('--save', type=str, default='/opt/ml/input/code/output',
                         help='path to save the final model')
-    args = parser.parse_args([])
+    args = parser.parse_args()
 
     # Set the random seed manually for reproductibility.
     torch.manual_seed(args.seed)
@@ -131,7 +131,7 @@ def main():
         ###############################################################################
         # Load data
         ###############################################################################
-
+        print('multiVAE')
         loader = MultiVAEDataLoader(args.data)
 
         n_items = loader.load_n_items()
@@ -175,9 +175,93 @@ def main():
 
             # Save the model if the n100 is the best we've seen so far.
             if n100 > best_n100:
-                with open(args.save, 'wb') as f:
+                with open(args.save + '/multivae.pt', 'wb') as f:
                     torch.save(model, f)
                 best_n100 = n100
+
+
+## 혹시모르니냄겨봄 inference로 옮기는데
+        # # Load the best saved model.
+        # with open(args.save, 'rb') as f:
+        #     model = torch.load(f)
+
+        # # Run on test data.
+        # test_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = test_data_tr, data_te = test_data_te, is_VAE=True, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
+        # print('=' * 89)
+        # print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
+        #         'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
+        # print('=' * 89)
+
+
+    elif args.model == 'multidae':
+
+        ###############################################################################
+        # Load data
+        ###############################################################################
+        print('multiDAE')
+        loader = MultiVAEDataLoader(args.data)
+
+        n_items = loader.load_n_items()
+        train_data = loader.load_data('train')
+        vad_data_tr, vad_data_te = loader.load_data('validation')
+        test_data_tr, test_data_te = loader.load_data('test')
+
+        N = train_data.shape[0]
+        idxlist = list(range(N))
+
+        ###############################################################################
+        # Build the model
+        ###############################################################################
+
+        p_dims = [200, 600, n_items]
+        model = MultiDAE(p_dims).to(device)
+
+        optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
+        criterion = MultiDAE.loss_function_dae
+
+        ###############################################################################
+        # Training code
+        ###############################################################################
+
+        best_n100 = -np.inf
+        # update_count = 0
+        answer = []
+        for epoch in range(1, args.epochs + 1):
+            epoch_start_time = time.time()
+            train(model, idxlist, train_data, device, epoch, is_VAE=False, criterion = criterion, optimizer = optimizer, N = N, 
+                    batch_size = args.batch_size, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap, 
+                    log_interval = args.log_interval)
+            val_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = vad_data_tr, data_te = vad_data_te, is_VAE=False, 
+                                                batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, 
+                                                anneal_cap = args.anneal_cap)
+            print('-' * 89)
+            print('| end of epoch {:3d} | time: {:4.2f}s | valid loss {:4.2f} | '
+                    'n100 {:5.3f} | r20 {:5.3f} | r50 {:5.3f}'.format(
+                        epoch, time.time() - epoch_start_time, val_loss,
+                        n100, r20, r50))
+            print('-' * 89)
+
+            n_iter = epoch * len(range(0, N, args.batch_size))
+
+
+            # Save the model if the n100 is the best we've seen so far.
+            if n100 > best_n100:
+                with open(args.save + '/multidae.pt', 'wb') as f:
+                    torch.save(model, f)
+                best_n100 = n100
+
+        # Load the best saved model.
+        with open(args.save + '/multidae.pt', 'rb') as f:
+            model = torch.load(f)
+
+        # Run on test data.
+        test_loss, n100, r20, r50 = evaluate(model = model, criterion = criterion, data_tr = test_data_tr, data_te = test_data_te, is_VAE=False,
+                                            batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, 
+                                            anneal_cap = args.anneal_cap)
+        print('=' * 89)
+        print('| End of training | test loss {:4.2f} | n100 {:4.2f} | r20 {:4.2f} | '
+                'r50 {:4.2f}'.format(test_loss, n100, r20, r50))
+        print('=' * 89)
 
 
     else:

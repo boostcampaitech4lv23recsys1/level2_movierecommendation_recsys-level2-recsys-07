@@ -17,7 +17,7 @@ def main():
     if args.model == 'multivae':
 
         def get_count(tp, id):
-            playcount_groupbyid = tp[[id]].groupby(id, as_index=False)
+            playcount_groupbyid = tp[[id]].groupby(id, as_index=True)   # pandas 옛날 버전에서 as_index=False
             count = playcount_groupbyid.size()
 
             return count
@@ -98,8 +98,9 @@ def main():
 
         # Split Train/Validation/Test User Indices
         tr_users = unique_uid[:(n_users - n_heldout_users * 2)]
-        vd_users = unique_uid[(n_users - n_heldout_users * 2):]
-        te_users = unique_uid[:]
+        vd_users = unique_uid[(n_users - n_heldout_users * 2): (n_users - n_heldout_users)]
+        te_users = unique_uid[(n_users - n_heldout_users):]
+        sub_users = unique_uid[:]
 
         #주의: 데이터의 수가 아닌 사용자의 수입니다!
         print("훈련 데이터에 사용될 사용자 수:", len(tr_users))
@@ -136,9 +137,10 @@ def main():
 
         test_plays = raw_data.loc[raw_data['user'].isin(te_users)]
         test_plays = test_plays.loc[test_plays['item'].isin(unique_sid)]
+        test_plays_tr, test_plays_te = split_train_test_proportion(test_plays)
 
-
-
+        sub_plays = raw_data.loc[raw_data['user'].isin(sub_users)]
+        sub_plays = sub_plays.loc[sub_plays['item'].isin(unique_sid)]
 
         train_data = numerize(train_plays, profile2id, show2id)
         train_data.to_csv(os.path.join(pro_dir, 'train.csv'), index=False)
@@ -150,16 +152,20 @@ def main():
         vad_data_te = numerize(vad_plays_te, profile2id, show2id)
         vad_data_te.to_csv(os.path.join(pro_dir, 'validation_te.csv'), index=False)
 
-        test_data = numerize(test_plays, profile2id, show2id)
-        test_data.to_csv(os.path.join(pro_dir, 'test_multivae.csv'), index=False)
+        test_data_tr = numerize(test_plays_tr, profile2id, show2id)
+        test_data_tr.to_csv(os.path.join(pro_dir, 'test_tr.csv'), index=False)
 
+        test_data_te = numerize(test_plays_te, profile2id, show2id)
+        test_data_te.to_csv(os.path.join(pro_dir, 'test_te.csv'), index=False)
+
+        sub_data = numerize(sub_plays, profile2id, show2id)
+        sub_data.to_csv(os.path.join(pro_dir, 'submit_data.csv'), index=False)
 
         with open ('/opt/ml/input/data/train/pro_sg/profile2id_multivae.pickle', 'wb') as fw:
             pickle.dump(profile2id_reverse, fw)
 
         with open ('/opt/ml/input/data/train/pro_sg/show2id_multivae.pickle', 'wb') as fw:
             pickle.dump(show2id_reverse, fw)
-
 
         print("Done!")
 
@@ -169,10 +175,6 @@ def main():
         print(vad_data_te)
         # print(test_data_tr)
         # print(test_data_te)
-
-
-
-
 
     else:
 

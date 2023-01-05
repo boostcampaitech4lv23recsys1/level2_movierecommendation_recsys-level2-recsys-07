@@ -211,3 +211,13 @@ cython_debug/
 *.wandb
 *.yaml
 *.npy
+log_tensorboard/*
+log/*
+KGAT-pytorch/data/*
+KGAT-pytorch/datasets/*
+data/*
+exp_ipynb/*
+recbole/log/*
+recbole/log_tensorboard/*
+recbole/ray_log/*
+recbole/saved/*

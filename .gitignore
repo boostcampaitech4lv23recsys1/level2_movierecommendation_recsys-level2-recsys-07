@@ -221,3 +221,4 @@ recbole/log/*
 recbole/log_tensorboard/*
 recbole/ray_log/*
 recbole/saved/*
+*.out

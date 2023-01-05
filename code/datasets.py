@@ -244,7 +244,9 @@ class MultiVAEDataLoader():
         elif datatype == 'validation':
             return self._load_tr_te_data(datatype)
         elif datatype == 'test':
-            return self._load_test_data(datatype)
+            return self._load_tr_te_data(datatype)
+        elif datatype == 'submit':
+            return self._load_submit_data(datatype)    
         else:
             raise ValueError("datatype should be in [train, validation, test]")
         
@@ -287,8 +289,8 @@ class MultiVAEDataLoader():
                                     (rows_te, cols_te)), dtype='float64', shape=(end_idx - start_idx + 1, self.n_items))
         return data_tr, data_te
 
-    def _load_test_data(self, datatype='test'):
-        path = os.path.join(self.pro_dir, 'test_multivae.csv')
+    def _load_submit_data(self, datatype='submit'):
+        path = os.path.join(self.pro_dir, 'submit_data.csv')
         
         tp = pd.read_csv(path)
         n_users = tp['uid'].max() + 1

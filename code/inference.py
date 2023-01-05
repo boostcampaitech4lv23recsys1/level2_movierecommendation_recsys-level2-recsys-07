@@ -18,7 +18,7 @@ from utils import (
 #multivae
 from trainers import make_submission
 from datasets import MultiVAEDataLoader
-from models import MultiVAE
+from models import MultiVAE, MultiDAE
 import torch.optim as optim
 import pandas as pd
 import pickle
@@ -56,7 +56,7 @@ def main():
     # train args
     parser.add_argument("--lr", type=float, default=0.001, help="learning rate of adam")
     parser.add_argument(
-        "--batch_size", type=int, default=256, help="number of batch_size"
+        "--batch_size", type=int, default=500, help="number of batch_size"
     )
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs")
     parser.add_argument("--no_cuda", action="store_true")
@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--seed", default=42, type=int)
 
     parser.add_argument(
-        "--weight_decay", type=float, default=0.0, help="weight_decay of adam"
+        "--weight_decay", type=float, default=0.01, help="weight_decay of adam"
     )
     parser.add_argument(
         "--adam_beta1", type=float, default=0.9, help="adam first beta value"
@@ -76,7 +76,7 @@ def main():
 
 
     #multivae
-    parser.add_argument('--model', default='multivae', type=str) # multivae 추가
+    parser.add_argument('--model', default='multidae', type=str) # multivae 추가
     parser.add_argument('--data', type=str, default='/opt/ml/input/data/train/',
                         help='Movielens dataset location')
 
@@ -116,6 +116,7 @@ def main():
     device = torch.device("cuda" if args.cuda else "cpu")
 
     if args.model == 'multivae':
+        print('multiVAE')
         # Load the best saved model.
         with open('/opt/ml/input/code/output/multivae.pt', 'rb') as f:
             model = torch.load(f)
@@ -165,7 +166,78 @@ def main():
 
         final = final.sort_values(by='user', ascending=True)
 
-        final.to_csv('/opt/ml/input/code/output/submission_multivae.csv')
+        final.to_csv('/opt/ml/input/code/output/submission_multivae.csv', index=False)
+
+#multidae
+    elif args.model == 'multidae':
+       # Load the best saved model.
+        print('multiDAE')
+        with open('/opt/ml/input/code/output/multidae.pt', 'rb') as f:
+            model = torch.load(f)
+
+        loader = MultiVAEDataLoader(args.data)
+
+        submit_data = loader.load_data('submit')
+
+        optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=args.wd)
+        criterion = MultiDAE.loss_function_dae
+        N = submit_data.shape[0]
+        # Run on test data.
+        final = make_submission(model = model, criterion = criterion, data_tr = submit_data, is_VAE=False, batch_size = args.batch_size, N = N, device = device, total_anneal_steps = args.total_anneal_steps, anneal_cap = args.anneal_cap)
+        print('=' * 89)
+        print(final)
+        print(len(final))
+
+#셔플은 preprocessing에 91,92줄로 하고, 91,92번째줄 돌아가면 셔플 하는거고 주석처리하면 서플 안하는 경우 입니다.
+####셔플 ㅇㅇ#################################################################################
+        u_list = list(range(0,31360))
+        arr = []
+        for i in u_list:
+            for _ in range(10):
+                arr.append(i)
+        len(arr)
+        final['user'] = arr
+
+        with open('/opt/ml/input/data/train/pro_sg/show2id_multivae.pickle', 'rb') as fr:
+            aa = pickle.load(fr)
+
+        final = final.rename(columns = {0:'item'})
+        ee = final['item'].apply(lambda x: aa[x])
+        final['item'] = ee
+
+        with open('/opt/ml/input/data/train/pro_sg/profile2id_multivae.pickle', 'rb') as fr:
+            aa = pickle.load(fr)
+
+        ee = final['user'].apply(lambda x: aa[x])
+        final['user'] = ee
+        final = final[['user','item']]
+        final = final.sort_values(by='user', ascending=True)
+        final.to_csv('/opt/ml/input/code/output/submission_multidae.csv', index=False)
+#################################################################################################
+#셔플은 preprocessing에 91,92줄로 하고, 91,92번째줄 돌아가면 셔플 하는거고 주석처리하면 서플 안하는 경우 입니다.
+####셔플 ㄴㄴ#####################################################################################
+        # tr_ = pd.read_csv('/opt/ml/input/data/train/train_ratings.csv')
+        # u_list = list(tr_['user'].unique())
+        # arr = []
+        # for i in u_list:
+        #     for _ in range(10):
+        #         arr.append(i)
+        # len(arr)
+        # final['user'] = arr
+
+        # with open('/opt/ml/input/data/train/pro_sg/show2id_multivae.pickle', 'rb') as fr:
+        #     aa = pickle.load(fr)
+
+        # final = final.rename(columns = {0:'item'})
+
+        # ee = final['item'].apply(lambda x: aa[x])
+
+        # final['item'] = ee
+
+        # final = final[['user','item']]
+        # final.to_csv('/opt/ml/input/code/output/submission_multidae.csv', index=False)
+##################################################################################################
+
 
     else:
         args.data_file = args.data_dir + "train_ratings.csv"
